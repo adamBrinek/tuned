@@ -1,0 +1,7 @@
+git pull: stahne aktualni soubory ze serveru na lokalni
+git add: pridani souboru do gitu
+git commit -m "zprava": commitnu zmeny a do zpravy napisu co se zmenilo
+git push: nahraju zmeny na server 
+
+
+Nejde Pushnout prazdny adresar.
