@@ -1,0 +1,337 @@
+%TODO:  
+
+%{{{ Hlavicka
+\documentclass[pdf]{beamer}
+\usetheme{Warsaw}
+
+%\usepackage{time}       % date and time
+\usepackage{graphicx}
+\usepackage[T1]{fontenc}    % european characters
+\usepackage{amssymb,amsmath}  % use mathematical symbols
+\usepackage{palatino}                  % use palatino as the default font
+\setbeamercovered{transparent}
+
+\begin{document}
+
+% here you define the information that will be displayed in the title/cover page
+\title[Prepinani profilu tuned pomoci pluginu]{Prepinani profilu tuned pomoci pluginu}
+\subtitle {}
+%\title[Pluginy pro Tuned]{Navrh pluginu pro Tuned\\}
+%\subtitle {Vyber minimalne 3 pluginu a jejich popis}
+%\author[Gilles Bertrand]{Gilles Bertrand\\TELECOM Bretagne - RSM Department\\
+%\vspace*{0.5cm}    
+%\includegraphics[height=0.5cm]{./figures/e-mail}
+%}
+%\date{11th December 2006}
+
+% this is used in the pdf information
+%\subject{Protokol a prepinani profilu}
+\subject{Plugin pro automaticke nastaveni profilu tuned}
+
+%}}}
+
+% here you build the title page
+\frame{
+ \titlepage
+}
+
+\section{O co jde?}
+\begin{frame} %{{{ O co jde
+	\frametitle{O co jde?}
+	\begin{block}{Popis tuned}
+		Tuned je nastroj pro monitorovani a spravu pocitace podle vybraneho profilu.	
+	\end{block}
+%	\begin{itemize}
+%		\item  BUDU MIT NEJAKY ODRAZKY K TOMU?
+%	\end{itemize}
+\end{frame} %}}}
+
+\section{Kdo komunikuje s kym, kdy a kde}
+\begin{frame} %{{{ Kdo komunikuje s kym
+	\frametitle{Kdo komunikuje}
+	\begin{block}{Kdo?}
+		Potrebuje spolu komunikovat plugin v danem programu a tuned, ktery bezi jako daemon.
+	\end{block}
+	\begin{block}{Kdy?}
+		Plugin vysila zpravu pouze pri zapnuti a pri vypnuti.
+	\end{block}
+	\begin{block}{Kde?}
+		Komunikuji spolu pres D-Bus.
+	\end{block}
+\end{frame} %}}}
+
+\section{Navrhy komunikace}
+\subsection{Spolecne vlastnosti}
+\begin{frame} %{{{ Informace pro vsechny moznosti komunikace
+	\frametitle{Spolecne vlastnosti}
+	\begin{block}{Popis}
+		Plugin odesle zpravu START pri startu a preda tuned zpravu, ze chce zmenit profil. 
+		Jak zprava bude vypadat a odkud bude tuned brat atributy na meneni rozeberu na dalsich slidech.
+		Pri ukonceni odesle plugin zpravu STOP a tuned vrati zmeny zpet.
+	\end{block}
+	\begin{block}{Priklad}
+		Pokud mam napriklad notebook nastaveny na powersave a pustim vypocetne narocnou aplikaci. Predpokladam ze chci mit co nejdriv hotovou praci. Plugin mi tedy nastavi tuned pro co nejlepsi vykon a pri ukonceni programu se postara o navrat hodnot zpet k powersave. Kdyby nevratil zmeny a notebook se nevrati k powersave. Zbytecne bude plytvat baterku.
+	\end{block}
+\end{frame}
+%\begin{frame}
+%	\begin{block}{Priklad \#2}
+%		Pokud mam notebook na powersave a spustim internetovy prohlizec. Prepokladam, ze se chci pripojit k internetu. Zapnu tedy wifi kartu (JE TO VUBEC MOZNY???????)
+%		Po vypnuti internetove prohlizece zase vratim pristroj do puvodniho stavu. V tomto prikladu opet vypnu wifi. Pokud bych ji nechal zapnutou zbytecne bych plytval baterii.
+%	\end{block}
+%\end{frame}
+\begin{frame}
+	\frametitle{Spolecne vlastnosti}
+	\begin{block}{+}
+		\begin{itemize}
+			\item Zautomatizovani nastavovani profilu.
+			\item Vetsi pohodli pro uzivatele.
+		\end{itemize}
+	\end{block}
+	\begin{block}{-}
+		\begin{itemize}
+			\item Potreba vymyslet komunikaci mezi pluginem a tuned.
+			\item Velka rozmanitost v tvorbe pluginu.
+			\item Nutnost pridat k parametrum prioritu.
+		\end{itemize}
+	\end{block}
+\end{frame} %}}}
+
+%\begin{frame} %{{{ Jak vypada parametr
+%	\frametitle{Jak vypada parametr}
+%	\begin{block}{zobrazeni parametru ve zprave}
+%		[nazev][hodnota][priorita]
+%	\end{block}
+%\end{frame} %}}}
+
+\subsection{Navrhy komunikace}
+\begin{frame} %{{{ Navrhy komunikace
+	\frametitle{Navrhy komunikace}
+		Orientacni nazvy
+	\begin{itemize}
+		\item Nazev napevno
+		\item Profily napevno
+		\item Vyber z nazvu
+		\item Konfigurak u pluginu
+		\item Konfogurak u pluginu \#2
+	\end{itemize}
+\end{frame} %}}}
+
+\subsubsection{Nazev napevno}
+\begin{frame} %{{{ Nazev napevno
+	\frametitle{Nazev napevno}
+	\begin{block}{Popis}
+		Plugin posle zpravu START a v ni nazev profilu na ktery se tuned nastavi.
+		Pri zprave STOP nacte Tuned predchozi profil.
+	\end{block}
+	\begin{block}{+}
+		\begin{itemize}
+			\item Jednoduche na vytvoreni
+		\end{itemize}
+	\end{block}
+	\begin{block}{-}
+		\begin{itemize}
+			\item Jenom jeden profil nastaveny
+			\item Vyber profilu zavisi na vuli tvoritele pluginu.
+			\item Uzivatel si nemuze vybirat.
+			\item Slozite pro uzivatele ladit vykon. Ne-li nemozne.
+		\end{itemize}
+	\end{block}
+\end{frame} %}}}
+
+\subsubsection{Profily napevno}
+\begin{frame} %{{{ Profily napevno
+	\frametitle{Profily napevno}
+	\begin{block}{Popis}
+		Plugin posle zpravu START a v ni nazev jednotlivych atributu na ktere se Tuned nastavi.
+		Varianta predchoziho navrhu.
+		Pri zprave STOP tuned nastavi parametry zpatky.
+	\end{block}
+	\begin{block}{+}
+		\begin{itemize}
+			\item Tvurce pluginu muze odladit parametry a mit jistotu ze je program bude pouzivat. 
+		\end{itemize}
+	\end{block}
+	\begin{block}{-}
+		\begin{itemize}
+			\item Vyber atributu opet zavisi na vuli tvoritele pluginu.
+			\item Uzivatel si nemuze vybirat.
+			\item Nemozne pro uzivatele ladit vykon.
+		\end{itemize}
+	\end{block}
+\end{frame} %}}}
+
+\subsubsection{Vyber z nazvu}
+\begin{frame} %{{{ Vyber z nazvuz
+	\frametitle{Vyber z nazvu}
+	\begin{block}{Popis}
+		Plugin po odeslani zpravy START dostane od Tuned seznam vsech dostupnych profilu.
+		Vybere si jeden z nich. Bud defaultni hodnotu nebo ten co si vybere uzivatel v nastaveni pluginu.
+	\end{block}
+	\begin{block}{+}
+		\begin{itemize}
+			\item Uzivatel si muze jednoduse menit profily z nabizenych.
+			\item Muzu i vytvaret nove profily v Tuned (podle napovedy)
+			\item Vsechny profily jsou na jednom miste
+		\end{itemize}
+	\end{block}
+	\begin{block}{-}
+		\begin{itemize}
+			\item Profily se muzou hromadit pokud si je nebudu uklizet.
+		\end{itemize}
+	\end{block}
+\end{frame} %}}}
+
+\subsubsection{Konfigurak u pluginu}
+\begin{frame} %{{{ Konfigurak u pluginu
+	\frametitle{Konfigurak u pluginu}
+	\begin{block}{Popis}
+		Vylepsena verze predchoziho navrhu. Plugin opet posila atributy, ale bere si je z konfiguraku co ma u sebe.
+	\end{block}
+	\begin{block}{+}
+		\begin{itemize}
+			\item Uzivatel muze ladit vykon
+			\item Pri odstraneni programu s pluginem se uklidi i konfiguracni soubor
+		\end{itemize}
+	\end{block}
+	\begin{block}{-}
+		\begin{itemize}
+			\item Zasila se nevic dat ze vsech navrhu.
+		\end{itemize}
+	\end{block}
+\end{frame} %}}}
+
+\subsubsection{Konfigurak u pluginu \#2}
+\begin{frame} %{{{  Konfigurak u sebe poslu pouze adresu v tuned
+	\frametitle{Konfigurak u sebe posilam cestu}
+	\begin{block}{Popis}
+		Plugin bude mit konfigurak u sebe a bude posilat cestu v parametru [main]
+	\end{block}
+	\begin{block}{+}
+		\begin{itemize}
+			\item Jednoducha komunikace
+			\item Konfigurak mam u sebe tzn. pokud odinstaluju program s pluginem uklidim i profil
+		\end{itemize}
+	\end{block}
+	\begin{block}{-}
+		\begin{itemize}
+			\item Musim kontrolovat jestli ten soubor tam je
+		\end{itemize}
+	\end{block}
+\end{frame} %}}}
+
+\begin{frame} %{{{ Jak vypada komunikace
+	\frametitle{Jak vypada komunikace}
+	\begin{block}{Start}
+		\begin{itemize}
+			\item 1) Pri startu systemu se zapne tuned.
+			\item 2) Zapne se program s pluginem.
+			\item 3) Plugin vysila zpravu pres D-Bus "START [main] include=PATH/plugin".
+			\item 4) Tuned nacte parametry z konfiguraku.
+			\item 5) Pokud nastave konflikt v parametru. Rozhodne se podle priority.
+		\end{itemize}
+	\end{block}
+\end{frame}
+\begin{frame}
+	\frametitle{Jak vypada komunikace}
+	\begin{block}{Stop}
+		\begin{itemize}
+			\item 1) Plugin pri vypinani vysila zpravu pres D-Bus "STOP PATH"
+			\item 2) Tuned vrati vsechny parametry na puvodni hodnoty.
+		\end{itemize}
+	\end{block}
+\end{frame} %}}}
+
+\section{Obecne informace}
+\begin{frame} %{{{ Obecne informace
+    \frametitle{Obecne informace}
+    \begin{itemize}
+        \item Pluginy se vyrazne lisi.
+        \item Ne ke vsem programum jde udelat plugin
+        \item Plugin "pracuje" jen pri spusteni a ukonceni programu
+    \end{itemize}
+\end{frame} %}}}
+
+\begin{frame} %{{{ Rozdily v pluginech
+    \frametitle{Rozdily v pluginech}
+     \begin{block}{Programovaci jazyk}
+		Kazdy program ma sve pravidla pro psani pluginu. Obcas se lisi v programovacim jazyku, ale napriklad OpenOffice umoznuje psat plugin v ruznych jazycich (Java, C++, Python)
+     \end{block}
+\end{frame} %}}}
+
+\section{Pluginy}
+\subsection{OpenOffice} %{{{ Open Office
+\begin{frame} 
+        \frametitle{Open Office}
+	\begin{block}{}
+		Pluging pro OpenOffice
+		\href{https://wiki.openoffice.org/wiki/Extensions_development}{Extensions developement}
+		Plugin se muze psat temer v libovolnem jazyce
+	\end{block}
+\end{frame}  %}}}
+
+\subsection{Vlc} %{{{ 
+	\begin{frame}
+	\frametitle{Vlc}
+	\begin{block}{}
+		Plugin pro Vlc
+		\href{https://wiki.videolan.org/Hacker_Guide/How_To_Write_a_Module/}{How to write module}
+		Plugin se pise v Ccku
+	\end{block}
+\end{frame}%}}}
+
+\subsection{Gimp}%{{{Gimp
+	\begin{frame}
+	\frametitle{Gimp}
+	\begin{block}{}
+			Plugin pro Gimp
+			http://developer.gimp.org/writing-a-plug-in/1/
+			Pise se v Ccku
+		\end{block}
+	\end{frame} %}}}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%{{{
+	%{{{
+% outline 
+%\AtBeginSection[]
+%{
+% \begin{frame}
+%  \frametitle{Pluginy pro Tuned}
+%  \small
+%  \tableofcontents[currentsection,hideothersections]
+%  \normalsize
+% \end{frame}
+%}
+%Co je jasne
+%	Poslu start a stop
+%	
+%Moznosti
+%	Poslu nazev profilu ktery mam predpripraveny 
+%		pokud vypnu program poslu ukoncovaci zpravu a vratim se k predchozimu profilu
+%			co kdyz mam po startu jeden profil, zapnu program (zmeni profil), pak zapnu dalsi (zase zmenim profil), vypnu prvni program, vypnu druhy program (nemuzu zapnout predchozi profil protoze je to blbost aby bezel) -> ze bych mel temp seznam a v nem si pamatoval profily a pripadne je oddelaval (seznam v pythonu)
+%	poslu parametr, parametry a ty si priradim do sveho "temp" profilu
+%		parametry v pluginu musi byt nejak pristupny u programu. Jinak bych musel mit konfigurak u profilu a to rovnou muzu posilat nazev
+%		Pokud konfigurak profilu bude v slozce k programu bude snadnejsi "uklizeni"
+%		Musim jeste rozlisovat jestli plugin bude mit v sobe napevno nejaky nazev, nebo si bude brat informace jen z konfiguraku, nebo bude mozne nastavit co bude posilat primo v pluginu.
+%	Musim vymyslet nejak prioritu. 
+	%}}}
+
+%\begin{frame} %{{{ PRAZDNY SLAJD
+%	\frametitle{PRAZDNY SLAJD}
+%	\begin{block}{Popis}
+%		PRAZDNY SLAJD
+%	\end{block}
+%	\begin{block}{+}
+%		\begin{itemize}
+%			\item TADY BUDOU DOBRE VECI
+%		\end{itemize}
+%	\end{block}
+%	\begin{block}{-}
+%		\begin{itemize}
+%			\item TADY BUDOU ZLE VECI
+%		\end{itemize}
+%	\end{block}
+%\end{frame} %}}}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%}}}
+
+\end{document}
