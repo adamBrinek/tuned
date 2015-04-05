@@ -1,12 +1,15 @@
 NAME = tuned
 VERSION = $(shell awk '/^Version:/ {print $$2}' tuned.spec)
 RELEASE = $(shell awk '/^Release:/ {print $$2}' tuned.spec)
-UNITDIR = $(shell rpm --eval '%{_unitdir}')
+UNITDIR = $(shell rpm --eval '%{_unitdir}' 2>/dev/null || echo /usr/lib/systemd/system)
+TMPFILESDIR = $(shell rpm --eval '%{_tmpfilesdir}' 2>/dev/null || echo /usr/lib/tmpfiles.d)
 VERSIONED_NAME = $(NAME)-$(VERSION)
 
 DESTDIR = /
+DOCDIR = /usr/share/doc/$(NAME)
 PYTHON_SITELIB = /usr/lib/python2.7/site-packages
 TUNED_PROFILESDIR = /usr/lib/tuned
+BASH_COMPLETIONS = /usr/share/bash-completion/completions
 
 archive: clean
 	mkdir -p $(VERSIONED_NAME)
@@ -14,7 +17,9 @@ archive: clean
 	cp AUTHORS COPYING INSTALL README $(VERSIONED_NAME)
 
 	cp tuned.py tuned.spec tuned.service tuned.tmpfiles Makefile tuned-adm.py \
-		tuned.bash dbus.conf recommend.conf tuned-main.conf $(VERSIONED_NAME)
+		tuned-adm.bash dbus.conf recommend.conf tuned-main.conf 00_tuned \
+		bootcmdline org.tuned.gui.policy tuned-gui.py tuned-gui.glade \
+		$(VERSIONED_NAME)
 	cp -a doc experiments libexec man profiles systemtap tuned $(VERSIONED_NAME)
 
 	tar cjf $(VERSIONED_NAME).tar.bz2 $(VERSIONED_NAME)
@@ -35,70 +40,63 @@ install:
 	cp -a tuned $(DESTDIR)$(PYTHON_SITELIB)
 
 	# binaries
-	mkdir -p $(DESTDIR)/usr/sbin
-	install -m 0755 tuned.py $(DESTDIR)/usr/sbin/tuned
-	install -m 0755 tuned-adm.py $(DESTDIR)/usr/sbin/tuned-adm
-	for file in systemtap/*; do \
-		install -m 0755 $$file $(DESTDIR)/usr/sbin/; \
-	done
+	install -Dpm 0755 tuned.py $(DESTDIR)/usr/sbin/tuned
+	install -Dpm 0755 tuned-adm.py $(DESTDIR)/usr/sbin/tuned-adm
+	install -Dpm 0755 tuned-gui.py $(DESTDIR)/usr/sbin/tuned-gui
+	$(foreach file, $(wildcard systemtap/*), \
+		install -Dpm 0755 $(file) $(DESTDIR)/usr/sbin/$(notdir $(file));)
+
+	# glade
+	install -Dpm 0755 tuned-gui.glade $(DESTDIR)/usr/share/tuned/ui/tuned-gui.glade
 
 	# tools
-	mkdir -p $(DESTDIR)/usr/bin
-	install -m 0755 experiments/powertop2tuned.py $(DESTDIR)/usr/bin/powertop2tuned
+	install -Dpm 0755 experiments/powertop2tuned.py $(DESTDIR)/usr/bin/powertop2tuned
 
 	# configuration files
-	mkdir -p $(DESTDIR)/etc/tuned
-	install -m 0644 tuned-main.conf $(DESTDIR)/etc/tuned/tuned-main.conf
+	install -Dpm 0644 tuned-main.conf $(DESTDIR)/etc/tuned/tuned-main.conf
 	# None profile in the moment, autodetection will be used
 	echo -n > $(DESTDIR)/etc/tuned/active_profile
+	install -Dpm 0644 bootcmdline $(DESTDIR)/etc/tuned/bootcmdline
 
 	# profiles & system config
 	mkdir -p $(DESTDIR)$(TUNED_PROFILESDIR)
 	cp -a profiles/* $(DESTDIR)$(TUNED_PROFILESDIR)/
-	install -m 0644 recommend.conf $(DESTDIR)$(TUNED_PROFILESDIR)/recommend.conf
+	install -pm 0644 recommend.conf $(DESTDIR)$(TUNED_PROFILESDIR)/recommend.conf
 
-	# Install bash completion
-	mkdir -p $(DESTDIR)/etc/bash_completion.d
-	install -m 0644 tuned.bash $(DESTDIR)/etc/bash_completion.d/tuned.bash
+	# bash completion
+	install -Dpm 0644 tuned-adm.bash $(DESTDIR)$(BASH_COMPLETIONS)/tuned-adm
 
 	# log dir
 	mkdir -p $(DESTDIR)/var/log/tuned
 
 	# runtime directory
 	mkdir -p $(DESTDIR)/run/tuned
-	mkdir -p $(DESTDIR)/etc/tmpfiles.d
-	install -m 0644 tuned.tmpfiles $(DESTDIR)/etc/tmpfiles.d/tuned.conf
+	install -Dpm 0644 tuned.tmpfiles $(DESTDIR)$(TMPFILESDIR)/tuned.conf
 
 	# systemd units
-	mkdir -p $(DESTDIR)$(UNITDIR)
-	install -m 0644 tuned.service $(DESTDIR)$(UNITDIR)/tuned.service
+	install -Dpm 0644 tuned.service $(DESTDIR)$(UNITDIR)/tuned.service
 
 	# dbus configuration
-	mkdir -p $(DESTDIR)/etc/dbus-1/system.d
-	install -m 0644 dbus.conf $(DESTDIR)/etc/dbus-1/system.d/com.redhat.tuned.conf
+	install -Dpm 0644 dbus.conf $(DESTDIR)/etc/dbus-1/system.d/com.redhat.tuned.conf
 
-	# manual pages *.8
-	mkdir -p $(DESTDIR)/usr/share/man/man8
-	for file in man/*.8; do \
-		install -m 0644 $$file $(DESTDIR)/usr/share/man/man8; \
-	done
+	# grub template
+	install -Dpm 0755 00_tuned $(DESTDIR)/etc/grub.d/00_tuned
 
-	# manual pages *.5
-	mkdir -p $(DESTDIR)/usr/share/man/man5
-	for file in man/*.5; do \
-		install -m 0644 $$file $(DESTDIR)/usr/share/man/man5; \
-	done
+	# polkit configuration
+	install -Dpm 0644 org.tuned.gui.policy $(DESTDIR)/usr/share/polkit-1/actions/org.tuned.gui.policy
+
+	# manual pages
+	$(foreach man_section, 5 7 8, $(foreach file, $(wildcard man/*.$(man_section)), \
+		install -Dpm 0644 $(file) $(DESTDIR)/usr/share/man/man$(man_section)/$(notdir $(file));))
 
 	# documentation
-	mkdir -p $(DESTDIR)/usr/share/doc/$(NAME)
-	cp -a doc/* $(DESTDIR)/usr/share/doc/$(NAME)
-	cp AUTHORS COPYING README $(DESTDIR)/usr/share/doc/$(NAME)
+	mkdir -p $(DESTDIR)$(DOCDIR)
+	cp -a doc/* $(DESTDIR)$(DOCDIR)
+	cp AUTHORS COPYING README $(DESTDIR)$(DOCDIR)
 
 	# Install libexec scripts
-	install -m 0755 -Dd $(DESTDIR)/usr/libexec/tuned
-	for file in libexec/*; do \
-		install -m 0755 $$file $(DESTDIR)/usr/libexec/tuned; \
-	done
+	$(foreach file, $(wildcard libexec/*), \
+		install -Dpm 0755 $(file) $(DESTDIR)/usr/libexec/tuned/$(notdir $(file));)
 
 clean:
 	find -name "*.pyc" | xargs rm -f
@@ -108,4 +106,3 @@ test:
 	python -m unittest discover tests
 
 .PHONY: clean archive srpm tag test
-

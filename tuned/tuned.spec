@@ -1,6 +1,6 @@
 Summary: A dynamic adaptive system tuning daemon
 Name: tuned
-Version: 2.3.0
+Version: 2.4.1
 Release: 1%{?dist}
 License: GPLv2+
 Source: https://fedorahosted.org/releases/t/u/tuned/tuned-%{version}.tar.bz2
@@ -11,7 +11,8 @@ Requires(post): systemd, virt-what
 Requires(preun): systemd
 Requires(postun): systemd
 Requires: python-decorator, dbus-python, pygobject3-base, python-pyudev
-Requires: virt-what, python-configobj, ethtool, gawk, kernel-tools
+Requires: virt-what, python-configobj, ethtool, gawk, kernel-tools, hdparm
+Requires: util-linux
 
 %description
 The tuned package contains a daemon that tunes system settings dynamically.
@@ -20,10 +21,18 @@ Based on that information components will then be put into lower or higher
 power saving modes to adapt to the current usage. Currently only ethernet
 network and ATA harddisk devices are implemented.
 
+%package gtk
+Summary: GTK GUI for tuned
+Requires: %{name} = %{version}-%{release}
+Requires: powertop, pygobject3-base, polkit
+
+%description gtk
+GTK GUI that can control tuned and provide simple profile editor.
+
 %package utils
 Requires: %{name} = %{version}-%{release}
-Summary: Various tuned utilities
 Requires: powertop
+Summary: Various tuned utilities
 
 %description utils
 This package contains utilities that can help you to fine tune and
@@ -40,6 +49,27 @@ manual monitoring of the system. Instead of the typical IO/sec it collects
 minimal, maximal and average time between operations to be able to
 identify applications that behave power inefficient (many small operations
 instead of fewer large ones).
+
+%package profiles-sap
+Summary: Additional tuned profile(s) targeted to SAP NetWeaver loads
+Requires: %{name} = %{version}-%{release}
+
+%description profiles-sap
+Additional tuned profile(s) targeted to SAP NetWeaver loads.
+
+%package profiles-sap-hana
+Summary: Additional tuned profile(s) targeted to SAP HANA loads
+Requires: %{name} = %{version}-%{release}
+
+%description profiles-sap-hana
+Additional tuned profile(s) targeted to SAP HANA loads.
+
+%package profiles-atomic
+Summary: Additional tuned profiles targeted to Atomic
+Requires: %{name} = %{version}-%{release}
+
+%description profiles-atomic
+Additional tuned profiles targeted to Atomic host and guest.
 
 %package profiles-compat
 Summary: Additional tuned profiles mainly for backward compatibility with tuned 1.0
@@ -62,17 +92,14 @@ make install DESTDIR=%{buildroot}
 sed -i 's/\(dynamic_tuning[ \t]*=[ \t]*\).*/\10/' %{buildroot}%{_sysconfdir}/tuned/tuned-main.conf
 %endif
 
+# conditional support for grub2, grub2 is not available on all architectures
+# and tuned is noarch package, thus the following hack is needed
+mkdir -p %{buildroot}%{_datadir}/tuned/grub2
+mv %{buildroot}%{_sysconfdir}/grub.d/00_tuned %{buildroot}%{_datadir}/tuned/grub2/00_tuned
+rmdir %{buildroot}%{_sysconfdir}/grub.d
 
 %post
 %systemd_post tuned.service
-
-# try to autodetect the best profile for the system in case there is none preset
-if [ ! -f /etc/tuned/active_profile -o -z "`cat /etc/tuned/active_profile 2>/dev/null`" ]
-then
-	PROFILE=`/usr/sbin/tuned-adm recommend 2>/dev/null`
-	[ "$PROFILE" ] || PROFILE=balanced
-	/usr/sbin/tuned-adm profile "$PROFILE" 2>/dev/null || echo -n "$PROFILE" > /etc/tuned/active_profile
-fi
 
 # convert active_profile from full path to name (if needed)
 sed -i 's|.*/\([^/]\+\)/[^\.]\+\.conf|\1|' /etc/tuned/active_profile
@@ -85,11 +112,25 @@ sed -i 's|.*/\([^/]\+\)/[^\.]\+\.conf|\1|' /etc/tuned/active_profile
 %postun
 %systemd_postun_with_restart tuned.service
 
+# conditional support for grub2, grub2 is not available on all architectures
+# and tuned is noarch package, thus the following hack is needed
+if [ "$1" == 0 ]; then
+  rm -f %{_sysconfdir}/grub.d/00_tuned || :
+fi
+
 
 %triggerun -- tuned < 2.0-0
 # remove ktune from old tuned, now part of tuned
 /usr/sbin/service ktune stop &>/dev/null || :
 /usr/sbin/chkconfig --del ktune &>/dev/null || :
+
+
+%posttrans
+# conditional support for grub2, grub2 is not available on all architectures
+# and tuned is noarch package, thus the following hack is needed
+if [ -d %{_sysconfdir}/grub.d ]; then
+  cp -a %{_datadir}/tuned/grub2/00_tuned %{_sysconfdir}/grub.d/00_tuned
+fi
 
 
 %files
@@ -98,7 +139,8 @@ sed -i 's|.*/\([^/]\+\)/[^\.]\+\.conf|\1|' /etc/tuned/active_profile
 %doc COPYING
 %doc README
 %doc doc/TIPS.txt
-%{_sysconfdir}/bash_completion.d
+%{_datadir}/bash-completion/completions/tuned-adm
+%exclude %{python_sitelib}/tuned/gtk
 %{python_sitelib}/tuned
 %{_sbindir}/tuned
 %{_sbindir}/tuned-adm
@@ -109,20 +151,35 @@ sed -i 's|.*/\([^/]\+\)/[^\.]\+\.conf|\1|' /etc/tuned/active_profile
 %exclude %{_prefix}/lib/tuned/laptop-battery-powersave
 %exclude %{_prefix}/lib/tuned/enterprise-storage
 %exclude %{_prefix}/lib/tuned/spindown-disk
+%exclude %{_prefix}/lib/tuned/sap-netweaver
+%exclude %{_prefix}/lib/tuned/sap-hana
+%exclude %{_prefix}/lib/tuned/sap-hana-vmware
+%exclude %{_prefix}/lib/tuned/atomic-host
+%exclude %{_prefix}/lib/tuned/atomic-guest
 %{_prefix}/lib/tuned
 %dir %{_sysconfdir}/tuned
-%config(noreplace) %{_sysconfdir}/tuned/active_profile
+%config(noreplace) %verify(not size mtime md5) %{_sysconfdir}/tuned/active_profile
 %config(noreplace) %{_sysconfdir}/tuned/tuned-main.conf
-%{_sysconfdir}/tmpfiles.d
+%config(noreplace) %verify(not size mtime md5) %{_sysconfdir}/tuned/bootcmdline
 %{_sysconfdir}/dbus-1/system.d/com.redhat.tuned.conf
+%{_tmpfilesdir}/tuned.conf
 %{_unitdir}/tuned.service
 %dir %{_localstatedir}/log/tuned
 %dir /run/tuned
 %{_mandir}/man5/tuned*
+%{_mandir}/man7/tuned-profiles.7*
 %{_mandir}/man8/tuned*
+%dir %{_datadir}/tuned
+%{_datadir}/tuned/grub2
+
+%files gtk
+%defattr(-,root,root,-)
+%{_sbindir}/tuned-gui
+%{python_sitelib}/tuned/gtk
+%{_datadir}/tuned/ui
+%{_datadir}/polkit-1/actions/org.tuned.gui.policy
 
 %files utils
-%defattr(-,root,root,-)
 %doc COPYING
 %{_bindir}/powertop2tuned
 %{_libexecdir}/tuned/pmqos-static*
@@ -141,6 +198,23 @@ sed -i 's|.*/\([^/]\+\)/[^\.]\+\.conf|\1|' /etc/tuned/active_profile
 %{_mandir}/man8/diskdevstat.*
 %{_mandir}/man8/scomes.*
 
+%files profiles-sap
+%defattr(-,root,root,-)
+%{_prefix}/lib/tuned/sap-netweaver
+%{_mandir}/man7/tuned-profiles-sap.7*
+
+%files profiles-sap-hana
+%defattr(-,root,root,-)
+%{_prefix}/lib/tuned/sap-hana
+%{_prefix}/lib/tuned/sap-hana-vmware
+%{_mandir}/man7/tuned-profiles-sap-hana.7*
+
+%files profiles-atomic
+%defattr(-,root,root,-)
+%{_prefix}/lib/tuned/atomic-host
+%{_prefix}/lib/tuned/atomic-guest
+%{_mandir}/man7/tuned-profiles-atomic.7*
+
 %files profiles-compat
 %defattr(-,root,root,-)
 %{_prefix}/lib/tuned/default
@@ -150,8 +224,80 @@ sed -i 's|.*/\([^/]\+\)/[^\.]\+\.conf|\1|' /etc/tuned/active_profile
 %{_prefix}/lib/tuned/laptop-battery-powersave
 %{_prefix}/lib/tuned/enterprise-storage
 %{_prefix}/lib/tuned/spindown-disk
+%{_mandir}/man7/tuned-profiles-compat.7*
 
 %changelog
+* Thu Oct 16 2014 Jaroslav Škarvada <jskarvad@redhat.com> - 2.4.1-1
+- new-release
+  - fixed return code of tuned grub template
+    resolves: rhbz#1151768
+  - plugin_bootloader: fix for multiple parameters on command line
+    related: rhbz#1148711
+  - tuned-adm: fixed traceback on "tuned-adm list"
+    resolves: rhbz#1149162
+  - plugin_bootloader is automatically disabled if grub2 is not found
+    resolves: rhbz#1150047
+  - plugin_disk: set_spindown and set_APM made independent
+    resolves: rhbz#976725
+
+* Wed Oct  1 2014 Jaroslav Škarvada <jskarvad@redhat.com> - 2.4.0-1
+- new-release
+  resolves: rhbz#1093883
+  - fixed traceback if profile cannot be loaded
+    related: rhbz#953128
+  - powertop2tuned: fixed traceback if rewriting file instead of dir
+    resolves: rhbz#963441
+  - daemon: fixed race condition in start/stop
+  - improved timings, it can be fine tuned in /etc/tuned/tuned-main.conf
+    resolves: rhbz#1028122
+  - throughput-performance: altered dirty ratios for better performance
+    resolves: rhbz#1043533
+  - latency-performance: leaving THP on its default
+    resolves: rhbz#1064510
+  - used throughput-performance profile on server by default
+    resolves: rhbz#1063481
+  - network-latency: added new profile
+    resolves: rhbz#1052418
+  - network-throughput: added new profile
+    resolves: rhbz#1052421
+  - recommend.conf: fixed config file
+    resolves: rhbz#1069123
+  - spec: added kernel-tools requirement
+    resolves: rhbz#1073008
+  - systemd: added cpupower.service conflict
+    resolves: rhbz#1073392
+  - balanced: used medium_power ALPM policy
+  - added support for >, < assignment modifiers in tuned.conf
+  - handled root block devices
+  - balanced: used conservative CPU governor
+    resolves: rhbz#1124125
+  - plugins: added selinux plugin
+  - plugin_net: added nf_conntrack_hashsize parameter
+  - profiles: added atomic-host profile
+    resolves: rhbz#1091977
+  - profiles: added atomic-guest profile
+    resolves: rhbz#1091979
+  - moved profile autodetection from post install script to tuned daemon
+    resolves: rhbz#1144067
+  - profiles: included sap-hana and sap-hana-vmware profiles
+  - man: structured profiles manual pages according to sub-packages
+  - added missing hdparm dependency
+    resolves: rhbz#1144858
+  - improved error handling of switch_profile
+    resolves: rhbz#1068699
+  - tuned-adm: active: detect whether tuned deamon is running
+    related: rhbz#1068699
+  - removed active_profile from RPM verification
+    resolves: rhbz#1104126
+  - plugin_disk: readahead value can be now specified in sectors
+    resolves: rhbz#1127127
+  - plugins: added bootloader plugin
+    resolves: rhbz#1044111
+  - plugin_disk: added error counter to hdparm calls
+  - plugins: added scheduler plugin
+    resolves: rhbz#1100826
+  - added tuned-gui
+
 * Wed Nov  6 2013 Jaroslav Škarvada <jskarvad@redhat.com> - 2.3.0-1
 - new-release
   resolves: rhbz#1020743

@@ -2,6 +2,7 @@ import base
 from decorators import *
 import tuned.logs
 from tuned.utils.nettool import ethcard
+from tuned.utils.commands import commands
 import os
 import re
 
@@ -18,6 +19,7 @@ class NetTuningPlugin(base.Plugin):
 		super(self.__class__, self).__init__(*args, **kwargs)
 		self._load_smallest = 0.05
 		self._level_steps = 6
+		self._cmd = commands()
 
 	def _init_devices(self):
 		self._devices = set()
@@ -29,7 +31,7 @@ class NetTuningPlugin(base.Plugin):
 				self._devices.add(device.sys_name)
 
 		self._free_devices = self._devices.copy()
-		log.info("devices: %s" % str(self._devices));
+		log.debug("devices: %s" % str(self._devices));
 
 	def _instance_init(self, instance):
 		instance._has_static_tuning = True
@@ -75,6 +77,7 @@ class NetTuningPlugin(base.Plugin):
 	def _get_config_options(cls):
 		return {
 			"wake_on_lan": None,
+			"nf_conntrack_hashsize": None,
 		}
 
 	def _init_stats_and_idle(self, instance, device):
@@ -121,6 +124,10 @@ class NetTuningPlugin(base.Plugin):
 		# speed / 7  Mb -> MB
 		return (int) (0.6 * 1024 * 1024 * speed / 8)
 
+	@classmethod
+	def _nf_conntrack_hashsize_path(self):
+		return "/sys/module/nf_conntrack/parameters/hashsize"
+
 	@command_set("wake_on_lan", per_device=True)
 	def _set_wake_on_lan(self, value, device):
 		if value is None:
@@ -132,15 +139,31 @@ class NetTuningPlugin(base.Plugin):
 			log.warn("Incorrect 'wake_on_lan' value.")
 			return
 
-		tuned.utils.commands.execute(["ethtool", "-s", device, "wol", value])
+		self._cmd.execute(["ethtool", "-s", device, "wol", value])
 
 	@command_get("wake_on_lan")
 	def _get_wake_on_lan(self, device):
 		value = None
 		try:
-			m = re.match(r".*Wake-on:\s*([" + WOL_VALUES + "]+).*", tuned.utils.commands.execute(["ethtool", device])[1], re.S)
+			m = re.match(r".*Wake-on:\s*([" + WOL_VALUES + "]+).*", self._cmd.execute(["ethtool", device])[1], re.S)
 			if m:
 				value = m.group(1)
 		except IOError:
 			pass
 		return value
+
+	@command_set("nf_conntrack_hashsize")
+	def _set_nf_conntrack_hashsize(self, value):
+		if value is None:
+			return
+
+		hashsize = int(value)
+		if hashsize >= 0:
+			self._cmd.write_to_file(self._nf_conntrack_hashsize_path(), hashsize)
+
+	@command_get("nf_conntrack_hashsize")
+	def _get_nf_conntrack_hashsize(self):
+		value = self._cmd.read_file(self._nf_conntrack_hashsize_path())
+		if len(value) > 0:
+			return int(value)
+		return None

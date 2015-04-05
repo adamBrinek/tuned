@@ -2,7 +2,7 @@ from tuned import exports
 import tuned.logs
 import tuned.exceptions
 import threading
-import tuned.utils.commands
+from tuned.utils.commands import commands
 
 __all__ = ["Controller"]
 
@@ -18,6 +18,7 @@ class Controller(tuned.exports.interfaces.ExportableInterface):
 		super(self.__class__, self).__init__()
 		self._daemon = daemon
 		self._terminate = threading.Event()
+		self._cmd = commands()
 
 	def run(self):
 		"""
@@ -28,7 +29,7 @@ class Controller(tuned.exports.interfaces.ExportableInterface):
 
 		self._terminate.clear()
 		# we have to pass some timeout, otherwise signals will not work
-		while not tuned.utils.commands.wait(self._terminate, 3600):
+		while not self._cmd.wait(self._terminate, 3600):
 			pass
 
 		log.info("terminating controller")
@@ -60,21 +61,24 @@ class Controller(tuned.exports.interfaces.ExportableInterface):
 		else:
 			return self.stop() and self.start()
 
-	@exports.export("s", "b")
+	@exports.export("s", "(bs)")
 	def switch_profile(self, profile_name):
 		was_running = self._daemon.is_running()
+		msg = "OK"
 		success = True
 		try:
 			if was_running:
-				self._daemon.stop()
+				# stop(switch_profile = True), due to profile switch
+				self._daemon.stop(True)
 			self._daemon.set_profile(profile_name)
-		except tuned.exceptions.TunedException:
+		except tuned.exceptions.TunedException as e:
 			success = False
+			msg = str(e)
 		finally:
 			if was_running:
 				self._daemon.start()
 
-		return success
+		return (success, msg)
 
 	@exports.export("", "s")
 	def active_profile(self):
@@ -101,4 +105,4 @@ class Controller(tuned.exports.interfaces.ExportableInterface):
 
 	@exports.export("", "s")
 	def recommend_profile(self):
-		return tuned.utils.commands.recommend_profile()
+		return self._cmd.recommend_profile()

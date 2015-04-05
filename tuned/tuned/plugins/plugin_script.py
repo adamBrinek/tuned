@@ -19,7 +19,7 @@ class ScriptPlugin(base.Plugin):
 		instance._has_static_tuning = True
 		instance._has_dynamic_tuning = False
 		if instance.options["script"] is not None:
-			# FIXME: this hack origins in profiles merger
+			# FIXME: this hack originated from profiles merger
 			assert isinstance(instance.options["script"], list)
 			instance._scripts = instance.options["script"]
 		else:
@@ -43,6 +43,6 @@ class ScriptPlugin(base.Plugin):
 		super(self.__class__, self)._instance_apply_static(instance)
 		self._call_scripts(instance._scripts, "start")
 
-	def _instance_unapply_static(self, instance):
+	def _instance_unapply_static(self, instance, profile_switch = False):
 		self._call_scripts(reversed(instance._scripts), "stop")
-		super(self.__class__, self)._instance_unapply_static(instance)
+		super(self.__class__, self)._instance_unapply_static(instance, profile_switch)

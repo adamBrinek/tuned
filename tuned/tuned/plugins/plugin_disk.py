@@ -1,7 +1,8 @@
 import hotplug
 from decorators import *
 import tuned.logs
-import tuned.utils.commands
+import tuned.consts as consts
+from tuned.utils.commands import commands
 import os
 import re
 
@@ -20,6 +21,7 @@ class DiskPlugin(hotplug.Plugin):
 		self._levels = len(self._power_levels)
 		self._level_steps = 6
 		self._load_smallest = 0.01
+		self._cmd = commands()
 
 	def _init_devices(self):
 		self._devices = set()
@@ -31,10 +33,10 @@ class DiskPlugin(hotplug.Plugin):
 		self._free_devices = self._devices.copy()
 
 	def _device_is_supported(cls, device):
-		return  device.device_type == "disk" \
-			and device.attributes.get("removable", None) == "0" \
-			and device.parent is not None \
-			and device.parent.subsystem in ["scsi", "virtio"]
+		return  device.device_type == "disk" and \
+			device.attributes.get("removable", None) == "0" and \
+			(device.parent is None or \
+					device.parent.subsystem in ["scsi", "virtio"])
 
 	def _hardware_events_init(self):
 		self._hardware_inventory.subscribe(self, "block", self._hardware_events_callback)
@@ -77,6 +79,9 @@ class DiskPlugin(hotplug.Plugin):
 	def _instance_init(self, instance):
 		instance._has_static_tuning = True
 
+		self._apm_errcnt = 0
+		self._spindown_errcnt = 0
+
 		if self._option_bool(instance.options["dynamic"]):
 			instance._has_dynamic_tuning = True
 			instance._load_monitor = self._monitors_repository.create("disk", instance.devices)
@@ -91,6 +96,26 @@ class DiskPlugin(hotplug.Plugin):
 		if instance._load_monitor is not None:
 			self._monitors_repository.delete(instance._load_monitor)
 			instance._load_monitor = None
+
+	def _update_spindown_errcnt(self, rc):
+		if rc == 0:
+			self._spindown_errcnt = 0
+		else:
+			if self._spindown_errcnt > consts.ERROR_THRESHOLD:
+				return
+			self._spindown_errcnt += 1
+			if self._spindown_errcnt == consts.ERROR_THRESHOLD:
+				log.info("disabling set_spindown command, too many consecutive errors")
+
+	def _update_apm_errcnt(self, rc):
+		if rc == 0:
+			self._apm_errcnt = 0
+		else:
+			if self._apm_errcnt > consts.ERROR_THRESHOLD:
+				return
+			self._apm_errcnt += 1
+			if self._apm_errcnt == consts.ERROR_THRESHOLD:
+				log.info("disabling set_apm command, too many consecutive errors")
 
 	def _instance_update_dynamic(self, instance, device):
 		load = instance._load_monitor.get_device_load(device)
@@ -122,8 +147,15 @@ class DiskPlugin(hotplug.Plugin):
 			new_power_level = self._power_levels[idle["level"]]
 			new_spindown_level = self._spindown_levels[idle["level"]]
 
-			log.debug("tuning level changed to %d (power %d, spindown %d)" % (idle["level"], new_power_level, new_spindown_level))
-			tuned.utils.commands.execute(["hdparm", "-S%d" % new_spindown_level, "-B%d" % new_power_level, "/dev/%s" % device])
+			log.debug("tuning level changed to %d" % idle["level"])
+			if self._spindown_errcnt < consts.ERROR_THRESHOLD:
+				log.debug("changing spindown to %d" % new_spindown_level)
+				(rc, out) = self._cmd.execute(["hdparm", "-S%d" % new_spindown_level, "/dev/%s" % device])
+				self._update_spindown_errcnt(rc)
+			if self._apm_errcnt < consts.ERROR_THRESHOLD:
+				log.debug("changing APM_level to %d" % new_power_level)
+				(rc, out) = self._cmd.execute(["hdparm", "-B%d" % new_power_level, "/dev/%s" % device])
+				self._update_apm_errcnt(rc)
 
 		log.debug("%s load: read %0.2f, write %0.2f" % (device, stats["read"], stats["write"]))
 		log.debug("%s idle: read %d, write %d, level %d" % (device, idle["read"], idle["write"], idle["level"]))
@@ -166,14 +198,14 @@ class DiskPlugin(hotplug.Plugin):
 	@command_set("elevator", per_device=True)
 	def _set_elevator(self, value, device):
 		sys_file = self._elevator_file(device)
-		tuned.utils.commands.write_to_file(sys_file, value)
+		self._cmd.write_to_file(sys_file, value)
 
 	@command_get("elevator")
 	def _get_elevator(self, device):
 		sys_file = self._elevator_file(device)
 		# example of scheduler file content:
 		# noop deadline [cfq]
-		return tuned.utils.commands.get_active_option(tuned.utils.commands.read_file(sys_file))
+		return self._cmd.get_active_option(self._cmd.read_file(sys_file))
 
 	def _alpm_policy_files(self):
 		policy_files = []
@@ -198,23 +230,25 @@ class DiskPlugin(hotplug.Plugin):
 	@command_set("alpm")
 	def _set_alpm(self, policy):
 		for policy_file in self._alpm_policy_files():
-			tuned.utils.commands.write_to_file(policy_file, policy)
+			self._cmd.write_to_file(policy_file, policy)
 
 	@command_get("alpm")
 	def _get_alpm(self):
 		for policy_file in self._alpm_policy_files():
-			return tuned.utils.commands.read_file(policy_file)
+			return self._cmd.read_file(policy_file)
 		return None
 
 	@command_set("apm", per_device=True)
 	def _set_apm(self, value, device):
-		tuned.utils.commands.execute(["hdparm", "-B", str(value), "/dev/" + device])
+		if self._apm_errcnt < consts.ERROR_THRESHOLD:
+			(rc, out) = self._cmd.execute(["hdparm", "-B", str(value), "/dev/" + device])
+			self._update_apm_errcnt(rc)
 
 	@command_get("apm")
 	def _get_apm(self, device):
 		value = None
 		try:
-			m = re.match(r".*=\s*(\d+).*", tuned.utils.commands.execute(["hdparm", "-B", "/dev/" + device])[1], re.S)
+			m = re.match(r".*=\s*(\d+).*", self._cmd.execute(["hdparm", "-B", "/dev/" + device])[1], re.S)
 			if m:
 				value = int(m.group(1))
 		except:
@@ -223,7 +257,9 @@ class DiskPlugin(hotplug.Plugin):
 
 	@command_set("spindown", per_device=True)
 	def _set_spindown(self, value, device):
-		tuned.utils.commands.execute(["hdparm", "-S", str(value), "/dev/" + device])
+		if self._spindown_errcnt < consts.ERROR_THRESHOLD:
+			(rc, out) = self._cmd.execute(["hdparm", "-S", str(value), "/dev/" + device])
+			self._update_spindown_errcnt(rc)
 
 	@command_get("spindown")
 	def _get_spindown(self, device):
@@ -233,15 +269,23 @@ class DiskPlugin(hotplug.Plugin):
 	def _readahead_file(self, device):
 		return os.path.join("/sys/block/", device, "queue/read_ahead_kb")
 
+	def _parse_ra(self, value):
+		val = str(value).split(None, 1)
+		v = int(val[0])
+		if len(val) > 1 and val[1][0] == "s":
+			# v *= 512 / 1024
+			v /= 2
+		return v
+
 	@command_set("readahead", per_device=True)
 	def _set_readahead(self, value, device):
 		sys_file = self._readahead_file(device)
-		tuned.utils.commands.write_to_file(sys_file, "%d" % int(value))
+		self._cmd.write_to_file(sys_file, "%d" % self._parse_ra(value))
 
 	@command_get("readahead")
 	def _get_readahead(self, device):
 		sys_file = self._readahead_file(device)
-		value = tuned.utils.commands.read_file(sys_file).strip()
+		value = self._cmd.read_file(sys_file).strip()
 		if len(value) == 0:
 			return None
 		return int(value)
@@ -269,12 +313,12 @@ class DiskPlugin(hotplug.Plugin):
 	@command_set("scheduler_quantum", per_device=True)
 	def _set_scheduler_quantum(self, value, device):
 		sys_file = self._scheduler_quantum_file(device)
-		tuned.utils.commands.write_to_file(sys_file, "%d" % int(value))
+		self._cmd.write_to_file(sys_file, "%d" % int(value))
 
 	@command_get("scheduler_quantum")
 	def _get_scheduler_quantum(self, device):
 		sys_file = self._scheduler_quantum_file(device)
-		value = tuned.utils.commands.read_file(sys_file).strip()
+		value = self._cmd.read_file(sys_file).strip()
 		if len(value) == 0:
 			log.info("disk_scheduler_quantum option is not supported by this HW")
 			return None

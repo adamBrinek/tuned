@@ -193,26 +193,27 @@ class Plugin(object):
 		if instance.has_dynamic_tuning and self._global_cfg.get("dynamic_tuning", consts.CFG_DEF_DYNAMIC_TUNING):
 			self._run_for_each_device(instance, self._instance_update_dynamic)
 
-	def instance_unapply_tuning(self, instance):
+	# profile_switch is true if unapplying tuning due to profile switch
+	def instance_unapply_tuning(self, instance, profile_switch = False):
 		"""
 		Remove all tunings applied by the plugin instance.
 		"""
 		if instance.has_dynamic_tuning and self._global_cfg.get("dynamic_tuning", consts.CFG_DEF_DYNAMIC_TUNING):
 			self._run_for_each_device(instance, self._instance_unapply_dynamic)
 		if instance.has_static_tuning:
-			self._instance_unapply_static(instance)
+			self._instance_unapply_static(instance, profile_switch)
 
 	def _instance_apply_static(self, instance):
 		self._execute_all_non_device_commands(instance)
 		self._execute_all_device_commands(instance, instance.devices)
 
-	def _instance_unapply_static(self, instance):
+	def _instance_unapply_static(self, instance, profile_switch = False):
 		self._cleanup_all_device_commands(instance, instance.devices)
 		self._cleanup_all_non_device_commands(instance)
 
 	def _instance_apply_dynamic(self, instance, device):
 		for option in filter(lambda opt: self._storage_get(instance, self._commands[opt], device) is None, self._options_used_by_dynamic):
-			self._save_current_value(instance, self._commands[option], device)
+			self._check_and_save_value(instance, self._commands[option], device)
 
 		self._instance_update_dynamic(instance, device)
 
@@ -317,27 +318,50 @@ class Plugin(object):
 			for device in devices:
 				self._execute_device_command(instance, command, device, new_value)
 
-	def _save_current_value(self, instance, command, device = None):
+	def _check_and_save_value(self, instance, command, device = None, new_value = None):
 		if device is not None:
 			current_value = command["get"](device)
 		else:
 			current_value = command["get"]()
+		if new_value is not None:
+			nws = str(new_value)
+			op = nws[:1]
+			val = nws[1:]
+			try:
+				if op == ">":
+					if int(val) > int(current_value):
+						new_value = val;
+					else:
+						current_value = None
+						new_value = None
+				elif op == "<":
+					if int(val) < int(current_value):
+						new_value = val;
+					else:
+						current_value = None
+						new_value = None
+			except ValueError:
+				log.warn("cannot compare new value '%s' with current value '%s' by operator '%s', using '%s' directly as new value" % (val, current_value, op, new_value))
+
 		if current_value is not None:
 			self._storage_set(instance, command, current_value, device)
+		return new_value
 
 	def _execute_device_command(self, instance, command, device, new_value):
 		if command["custom"] is not None:
 			command["custom"](True, new_value, device)
 		else:
-			self._save_current_value(instance, command, device)
-			command["set"](new_value, device)
+			new_value = self._check_and_save_value(instance, command, device, new_value)
+			if new_value is not None:
+				command["set"](new_value, device)
 
 	def _execute_non_device_command(self, instance, command, new_value):
 		if command["custom"] is not None:
 			command["custom"](True, new_value)
 		else:
-			self._save_current_value(instance, command)
-			command["set"](new_value)
+			new_value = self._check_and_save_value(instance, command, None, new_value)
+			if new_value is not None:
+				command["set"](new_value)
 
 	def _cleanup_all_non_device_commands(self, instance):
 		for command in filter(lambda command: not command["per_device"], self._commands.values()):

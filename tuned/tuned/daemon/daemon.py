@@ -1,9 +1,10 @@
 import os
+import errno
 import threading
 import tuned.logs
 from tuned.exceptions import TunedException
 import tuned.consts as consts
-import tuned.utils.commands
+from tuned.utils.commands import commands
 
 log = tuned.logs.get()
 
@@ -33,6 +34,7 @@ class Daemon(object):
 		self._unit_manager = unit_manager
 		self._profile_loader = profile_loader
 		self._init_threads()
+		self._cmd = commands()
 		try:
 			self._init_profile(profile_name)
 		except TunedException as e:
@@ -41,6 +43,8 @@ class Daemon(object):
 	def _init_threads(self):
 		self._thread = None
 		self._terminate = threading.Event()
+		# Flag which is set if terminating due to profile_switch
+		self._terminate_profile_switch = threading.Event()
 
 	def _init_profile(self, profile_name):
 		if profile_name is None:
@@ -55,6 +59,8 @@ class Daemon(object):
 
 		if profile_name == "" or profile_name is None:
 			self._profile = None
+		elif profile_name not in self.profile_loader.profile_locator.get_known_names():
+			raise TunedException("Requested profile '%s' doesn't exist." % profile_name)
 		else:
 			try:
 				self._profile = self._profile_loader.load(profile_name)
@@ -88,7 +94,7 @@ class Daemon(object):
 		# the default) is still much better than 50 ms polling with unpatched interpreter.
 		# For more details see tuned rhbz#917587.
 		_sleep_cnt = self._sleep_cycles
-		while not tuned.utils.commands.wait(self._terminate, self._sleep_interval):
+		while not self._cmd.wait(self._terminate, self._sleep_interval):
 			if self._dynamic_tuning:
 				_sleep_cnt -= 1
 				if _sleep_cnt <= 0:
@@ -98,22 +104,45 @@ class Daemon(object):
 					log.debug("performing tunings")
 					self._unit_manager.update_tuning()
 
-		self._unit_manager.stop_tuning()
+		# if terminating due to profile switch
+		if self._terminate_profile_switch.is_set():
+			profile_switch = True
+		else:
+			profile_switch = False
+		self._unit_manager.stop_tuning(profile_switch)
 		self._unit_manager.destroy_all()
 
 	def _save_active_profile(self, profile_name):
 		try:
 			with open(consts.ACTIVE_PROFILE_FILE, "w") as f:
-				f.write(profile_name)
+				f.write(profile_name + "\n")
 		except (OSError,IOError) as e:
 			log.error("Cannot write active profile into %s: %s" % (consts.ACTIVE_PROFILE_FILE, str(e)))
+
+	def _set_recommended_profile(self):
+		log.info("no profile preset, checking what is recommended for your configuration")
+		profile = self._cmd.recommend_profile()
+		log.info("using '%s' profile and setting it as active" % profile)
+		self._save_active_profile(profile)
+		return profile
 
 	def _get_active_profile(self):
 		try:
 			with open(consts.ACTIVE_PROFILE_FILE, "r") as f:
-				return f.read().strip()
-		except (OSError, IOError, EOFError) as e:
-			log.error("Cannot read active profile, setting default.")
+				profile = f.read().strip()
+				if profile == "":
+					profile = self._set_recommended_profile()
+				return profile
+		except IOError as e:
+			if e.errno == errno.ENOENT:
+				# No such file or directory
+				profile = self._set_recommended_profile()
+			else:
+				profile = consts.DEFAULT_PROFILE
+				log.error("error reading active profile from '%s', falling back to '%s' profile" % (consts.ACTIVE_PROFILE_FILE, profile))
+			return profile
+		except (OSError, EOFError) as e:
+			log.error("cannot read active profile, falling back to '%s' profile" % consts.DEFAULT_PROFILE)
 			return consts.DEFAULT_PROFILE
 
 	def is_enabled(self):
@@ -131,14 +160,18 @@ class Daemon(object):
 
 		log.info("starting tuning")
 		self._thread = threading.Thread(target=self._thread_code)
+		self._terminate_profile_switch.clear()
 		self._terminate.clear()
 		self._thread.start()
 		return True
 
-	def stop(self):
+	# profile_switch is helper telling plugins whether the stop is due to profile switch
+	def stop(self, profile_switch = False):
 		if not self.is_running():
 			return False
 		log.info("stopping tunning")
+		if profile_switch:
+			self._terminate_profile_switch.set()
 		self._terminate.set()
 		self._thread.join()
 		self._thread = None
