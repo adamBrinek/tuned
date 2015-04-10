@@ -106,3 +106,28 @@ class Controller(tuned.exports.interfaces.ExportableInterface):
 	@exports.export("", "s")
 	def recommend_profile(self):
 		return self._cmd.recommend_profile()
+
+
+#Autoswitching START
+#Query pres DBUS jsou:
+#                       ON || OFF
+#                       CHANGE
+#                       STOP (QUIT)
+
+#       @exports.export("","")
+#       1. argument -> receiving
+#       2. argument -> sending
+
+        @exports.export("","b")
+        def status(self):
+            return autoswitch.status()
+
+        @exports.export("s","b")
+        def change(self,profile_name):
+            return autoswitch.change(profile_name)
+
+        @exports.export("s","b")
+        def quit(self,profile_name):
+            return autoswitch.quit(profile_name)
+                
+
