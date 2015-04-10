@@ -1,9 +1,14 @@
 #!/usr/bin/python -Es
 
+#imports {{{
+
 from configobj import ConfigObj
 from validate import Validator
 import sys
+#}}}
 
+
+# global constants {{{
 PROFILES = "Profiles"
 NAMES = "names"
 CHANGING = "changing"
@@ -18,7 +23,11 @@ GLOBAL_CONFIG_FILE = "tuned-main.conf"
 global_config_spec =    ["dynamic_tuning = boolean(default=%s)" % CFG_DEF_DYNAMIC_TUNING,
                         "sleep_interval = integer(default=%s)" % CFG_DEF_SLEEP_INTERVAL,
                         "update_interval = integer(default=%s)" % CFG_DEF_UPDATE_INTERVAL]
+#}}}
 
+
+# class Conf
+# load configuration and validate {{{
 class Conf(object):
     def __init__(self,conf_name):
         self.config = self._load_global_config(conf_name)
@@ -43,7 +52,16 @@ class Conf(object):
             raise TunedException("Global tuned configuration file '%s' is not valid." % file_name)
     
         return config
+#}}}
 
+
+#class Autoswitch
+#parse configuration and create table_1 {{{
+#        ------------------------------------
+#tab_1   | Code-name | Priority | Parent    |
+#        ------------------------------------
+#        | String    | Integer  | List      |
+#        ------------------------------------
 class Autoswitch(object):
     def __init__(self, conf=None):
         self._config = conf
@@ -74,16 +92,12 @@ class Autoswitch(object):
         
         print(self._tab_1[0])
         print(self._tab_1[1])
-#        ------------------------------------
-#tab_1   | Code-name | Priority | Parent    |
-#        ------------------------------------
-#        | String    | Integer  | List      |
-#        ------------------------------------
-#config = ConfigObj('tuned-main.conf')
-#profiles = config[PROFILES][NAMES]
-#
+#}}}
 
+
+#main{{{
 conf = Conf("tuned-main.conf")
 auto = Autoswitch(conf.config)
 
 sys.exit(0)
+#}}}
