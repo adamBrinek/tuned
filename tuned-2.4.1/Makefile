@@ -9,7 +9,7 @@ DESTDIR = /
 DOCDIR = /usr/share/doc/$(NAME)
 PYTHON_SITELIB = /usr/lib/python2.7/site-packages
 TUNED_PROFILESDIR = /usr/lib/tuned
-BASH_COMPLETIONS = /usr/share/bash-completion/completions
+BASH_COMPLETIONS = /usr/share/bash-completion/completions/
 
 archive: clean
 	mkdir -p $(VERSIONED_NAME)
@@ -17,9 +17,8 @@ archive: clean
 	cp AUTHORS COPYING INSTALL README $(VERSIONED_NAME)
 
 	cp tuned.py tuned.spec tuned.service tuned.tmpfiles Makefile tuned-adm.py \
-		tuned-adm.bash dbus.conf recommend.conf tuned-main.conf 00_tuned \
-		bootcmdline org.tuned.gui.policy tuned-gui.py tuned-gui.glade \
-		$(VERSIONED_NAME)
+		tuned.bash dbus.conf recommend.conf tuned-main.conf 00_tuned bootcmdline \
+		org.tuned.gui.policy tuned-gui.py tuned-gui.glade $(VERSIONED_NAME)
 	cp -a doc experiments libexec man profiles systemtap tuned $(VERSIONED_NAME)
 
 	tar cjf $(VERSIONED_NAME).tar.bz2 $(VERSIONED_NAME)
@@ -63,8 +62,8 @@ install:
 	cp -a profiles/* $(DESTDIR)$(TUNED_PROFILESDIR)/
 	install -pm 0644 recommend.conf $(DESTDIR)$(TUNED_PROFILESDIR)/recommend.conf
 
-	# bash completion
-	install -Dpm 0644 tuned-adm.bash $(DESTDIR)$(BASH_COMPLETIONS)/tuned-adm
+	# Install bash completion
+	install -Dpm 0644 tuned.bash $(DESTDIR)$(BASH_COMPLETIONS)/tuned/tuned.bash
 
 	# log dir
 	mkdir -p $(DESTDIR)/var/log/tuned

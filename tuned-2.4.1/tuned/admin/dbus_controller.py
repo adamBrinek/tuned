@@ -21,7 +21,7 @@ class DBusController(object):
 		try:
 			self._init_proxy()
 		except dbus.exceptions.DBusException:
-			raise TunedAdminDBusException("Cannot talk to Tuned daemon via DBus. Is Tuned daemon running?")
+			raise TunedAdminDBusException("Cannot talk to Tuned daemon via DBus.")
 
 		try:
 			method = self._proxy.get_dbus_method(method_name)
