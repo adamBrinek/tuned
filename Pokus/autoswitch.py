@@ -1,14 +1,22 @@
 #!/usr/bin/python -Es
 
-#imports {{{
-
+#imports
+#{{{
 from configobj import ConfigObj
 from validate import Validator
 import sys
+import dbus
+import dbus.service
+from dbus.mainloop.glib import DBusGMainLoop
+import gi.repository.GLib
+#import gobject
+
 #}}}
 
 
-# global constants {{{
+
+# global constants
+# {{{
 PROFILES = "Profiles"
 NAMES = "names"
 CHANGING = "changing"
@@ -27,7 +35,8 @@ global_config_spec =    ["dynamic_tuning = boolean(default=%s)" % CFG_DEF_DYNAMI
 
 
 # class Conf
-# load configuration and validate {{{
+# load configuration and validate 
+#{{{
 class Conf(object):
     def __init__(self,conf_name):
         self.config = self._load_global_config(conf_name)
@@ -56,12 +65,13 @@ class Conf(object):
 
 
 #class Autoswitch
-#parse configuration and create table_1 {{{
+#parse configuration and create table_1
 #        ------------------------------------
 #tab_1   | Code-name | Priority | Parent    |
 #        ------------------------------------
 #        | String    | Integer  | List      |
 #        ------------------------------------
+#{{{
 class Autoswitch(object):
     def __init__(self, conf=None):
         self._config = conf
@@ -79,6 +89,7 @@ class Autoswitch(object):
     def _load_values(self):
         self._sleep_interval = int(self._config["sleep_interval"])
         self._update_interval = int(self._config.get("update_interval", CFG_DEF_UPDATE_INTERVAL))
+
         self._dynamic_tuning = self._config.get("dynamic_tuning", CFG_DEF_DYNAMIC_TUNING)
         self._profile_names = self._config[PROFILES][NAMES]
         
@@ -90,14 +101,56 @@ class Autoswitch(object):
             self._tab_1[self._pos].append(self._config[item][PARENT])
         
         
-        print(self._tab_1[0])
-        print(self._tab_1[1])
+#}}}
+
+#class Dbus
+#{{{
+
+# DBUS connection
+class Connection(object): #{{{
+    def __init__(self,bus_name,interface_name,object_name):
+        self._bus_name = bus_name
+        self._bus_interface = interface_name
+        self._object_name = object_name
+        self._proxy = None
+#        self.__init_proxy()
+
+ #   def __init_proxy(self):
+#        if self._proxy is None:
+ #           #bus = dbus.SystemBus()
+  #          bus = dbus.SessionBus()
+   #         name = dbus.service.BusName(DBUS_BUS,bus)
+            #self._proxy = bus.get_object(self._bus_name, self._bus_interface, self._object_name)
+
+    def _call(self, method_name, *args, **kwargs):
+        self.__init_proxy()
+        method = self._proxy.get_dbus_method(method_name)
+        return method(*args, **kwargs)
 #}}}
 
 
+
 #main{{{
+#definice globalnich promenych
+DBUS_BUS="com.redhat.tuned"
+DBUS_OBJECT="/Tuned"
+DBUS_INTERFACE="com.redhat.tuned.control"
+
+
 conf = Conf("tuned-main.conf")
 auto = Autoswitch(conf.config)
+
+
+DBusGMainLoop(set_as_default=True)
+session_bus = dbus.SessionBus()
+name = dbus.service.BusName(DBUS_BUS,session_bus)
+
+control = Connection(DBUS_BUS, DBUS_OBJECT, DBUS_INTERFACE)
+
+mainloop = gi.repository.GLib.MainLoop()
+
+mainloop.run()
+
 
 sys.exit(0)
 #}}}
