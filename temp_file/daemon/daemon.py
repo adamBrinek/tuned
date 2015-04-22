@@ -6,24 +6,11 @@ from tuned.exceptions import TunedException
 import tuned.consts as consts
 from tuned.utils.commands import commands
 
-#AUTOSWITCH
-import autoswitch
-#AUTOSWITCH
-
-
 log = tuned.logs.get()
 
 
 class Daemon(object):
 	def __init__(self, unit_manager, profile_loader, profile_name=None, config=None):
-
-
-#AUTOSWITCH
-                self._autoswitch = autoswitch.Autoswitch()
-#AUTOSWITCH
-
-
-
 		log.debug("initializing daemon")
 		self._sleep_interval = int(consts.CFG_DEF_SLEEP_INTERVAL)
 		self._update_interval = int(consts.CFG_DEF_UPDATE_INTERVAL)
@@ -65,11 +52,6 @@ class Daemon(object):
 
 		self._profile = None
 		self.set_profile(profile_name)
-
-#AUTOSWITCH
-        def autoswitch(self):
-                return self._autoswitch
-#AUTOSWITCH
 
 	def set_profile(self, profile_name, save_instantly=False):
 		if self.is_running():

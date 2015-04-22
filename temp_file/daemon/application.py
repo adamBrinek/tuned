@@ -11,23 +11,9 @@ import sys
 import select
 import tuned.consts as consts
 
-
-#AUTOSWITCH
-import autoswitch
-#AUTOSWITCH
-
 log = tuned.logs.get()
 
 __all__ = ["Application"]
-
-
-#TEMP
-
-#TEMP
-
-
-
-
 
 global_config_spec = 	["dynamic_tuning = boolean(default=%s)" % consts.CFG_DEF_DYNAMIC_TUNING,
 			"sleep_interval = integer(default=%s)" % consts.CFG_DEF_SLEEP_INTERVAL,
@@ -49,7 +35,6 @@ class Application(object):
 		else:
 			log.info("dynamic tuning is globally disabled")
 
-
 		plugins_repository = plugins.Repository(monitors_repository, storage_factory, hardware_inventory, device_matcher, plugin_instance_factory, self.config)
 		unit_manager = units.Manager(plugins_repository, monitors_repository)
 
@@ -61,10 +46,6 @@ class Application(object):
 
 		self._daemon = daemon.Daemon(unit_manager, profile_loader, profile_name, self.config)
 		self._controller = controller.Controller(self._daemon)
-#AUTOSWITCH
-                self.autoswitch = self._daemon.autoswitch()
-                self._read_config()
-#AUTOSWITCH
 
 		self._dbus_exporter = None
 		self._init_signals()
@@ -205,27 +186,10 @@ class Application(object):
 		except ConfigObjError as e:
 			raise TunedException("Error parsing global tuned configuration file '%s'." % file_name)
 		vdt = Validator()
+                # parameter copy=True copy default values if they're not there
 		if (not config.validate(vdt, copy=True)):
 			raise TunedException("Global tuned configuration file '%s' is not valid." % file_name)
 		return config
-#AUTOSWITCH
-
-        def _read_config(self):
-                self.keys = self.config.keys()
-                self.autoswitch.set_switching(self.config.get("autoswitch"))
-                self.autoswitch.set_type(self.config.get("changing"))
-                for item in self.keys:
-                    if item not in ["dynamic_tuning", "sleep_interval", "update_interval", "autoswitch", "changing"]:
-                        self._read_section(item)
-
-        def _read_section(self,section_name):
-                section = self.config[section_name]
-                for item in section:
-                    value = section.get(item)
-                    line = [section_name, item, value]
-                    self.autoswitch.tab_1.append(line)
-
-#AUTOSWITCH
 
 	@property
 	def daemon(self):

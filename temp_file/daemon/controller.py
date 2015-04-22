@@ -17,12 +17,8 @@ class Controller(tuned.exports.interfaces.ExportableInterface):
 	def __init__(self, daemon):
 		super(self.__class__, self).__init__()
 		self._daemon = daemon
-#AUTOSWITCH
-                self._autoswitch = daemon.autoswitch()
-#AUTOSWITCH
 		self._terminate = threading.Event()
 		self._cmd = commands()
-                self.message = "Return message"
 
 	def run(self):
 		"""
@@ -111,34 +107,35 @@ class Controller(tuned.exports.interfaces.ExportableInterface):
 	def recommend_profile(self):
 		return self._cmd.recommend_profile()
 
-#Autoswitching
-        @exports.export("s","b")
-        def change(self, code_name):
-                return self._autoswitch.change(code_name)
 
-        @exports.export("", "b")
+#Autoswitching START
+#Query pres DBUS jsou:
+#                       status ON || OFF
+#                       zapnout vypnout automaticke ladeni
+#                       CHANGE
+#                       STOP (QUIT)
+#                       
+
+#       @exports.export("","")
+#       1. argument -> receiving
+#       2. argument -> sending
+
+#   U query si vytvorim "semafor" a frontu na pozadavky
+
+
+        #Query jestli je zapnuto nebo vypnuto automaticke ladeni
+        @exports.export("","b")
         def status(self):
-                return self._autoswitch.status()
+            return autoswitch.status()
 
-        @exports.export("","s")
-        def type(self):
-                log.info("type")
-                return self._autoswitch.type()
+        #Query na automatickou zmenu profilu
+        @exports.export("s","b")
+        def change(self,profile_name):
+            return autoswitch.change(profile_name)
 
+        #query na zruseni pozadavku na profil. Tzn. program s pluginem mi konci a uz ho nepotrebuju 
+        @exports.export("s","b")
+        def quit(self,profile_name):
+            return autoswitch.quit(profile_name)
+                
 
-#        @exports.export("s", "b")
-#        def quit(self,code_name):
-#                return self._autoswitch.quit(code_name)
-
-            #Query pres DBUS jsou:
-            #                       status ON || OFF
-            #                       zapnout vypnout automaticke ladeni
-            #                       CHANGE
-            #                       STOP (QUIT)
-            #                       
-
-            #       @exports.export("","")
-            #       1. argument -> receiving
-            #       2. argument -> sending
-
-            #   U query si vytvorim "semafor" a frontu na pozadavky

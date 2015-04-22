@@ -1,6 +1,6 @@
 git pull: stahne aktualni soubory ze serveru na lokalni
-git add: pridani souboru do gitu
-git commit -m "zprava": commitnu zmeny a do zpravy napisu co se zmenilo
+git add: pridani souboru do gitu (git add . -> tecka prida vsechny soubory a slozky)
+git commit -m "zprava": commitnu zmeny a do zpravy napisu co se zmenilo ( pokud nepouziju parametr -m otevre se mi "vim" okno na dopsani vetsi zpravy)
 git push: nahraju zmeny na server 
 
 
